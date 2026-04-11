@@ -1,6 +1,10 @@
 import polars as pl
+# ---------- Helper ----------
+def safe_div(a, b):
+    return a / b if b != 0 else 0
 
 
+# ---------- Monthly Trends ----------
 def monthly_sales_summary(df: pl.DataFrame):
     df = df.with_columns(
         pl.col("Order Date").str.strptime(pl.Date, strict=False)
@@ -11,66 +15,165 @@ def monthly_sales_summary(df: pl.DataFrame):
             pl.col("Order Date").dt.year().alias("year"),
             pl.col("Order Date").dt.month().alias("month")
         ])
-        .groupby(["year", "month"])
+        .drop_nulls(["year", "month"])
+        .group_by(["year", "month"])
         .agg([
-            pl.sum("Sales").alias("total_sales"),
-            pl.sum("Profit").alias("total_profit"),
-            pl.mean("Discount").alias("avg_discount")
+            pl.sum("Sales").alias("sales"),
+            pl.sum("Profit").alias("profit"),
+            pl.mean("Discount").alias("discount")
         ])
         .sort(["year", "month"])
     )
 
-    return [
-        f"In {r['year']}-{r['month']:02d}, total sales were {r['total_sales']:.2f}, profit was {r['total_profit']:.2f}, and average discount was {r['avg_discount']:.2f}."
-        for r in result.to_dicts()
-    ]
+    rows = result.to_dicts()
+
+    texts = []
+    for i, r in enumerate(rows):
+        margin = safe_div(r["profit"], r["sales"])
+
+        trend = ""
+        if i > 0:
+            prev = rows[i - 1]
+            if r["sales"] > prev["sales"]:
+                trend = "increased compared to previous month"
+            else:
+                trend = "decreased compared to previous month"
+
+        texts.append(
+            f"In {r['year']}-{r['month']:02d}, sales were {r['sales']:.2f} and profit was {r['profit']:.2f}. "
+            f"Profit margin was {margin:.2%} and average discount was {r['discount']:.2f}. "
+            f"Sales {trend}."
+        )
+
+    return texts
 
 
+# ---------- Category + Subcategory ----------
 def category_summary(df: pl.DataFrame):
     result = (
-        df.groupby("Category")
+        df.group_by(["Category", "Sub-Category"])
         .agg([
-            pl.sum("Sales").alias("total_sales"),
-            pl.sum("Profit").alias("total_profit"),
-            pl.mean("Discount").alias("avg_discount")
+            pl.sum("Sales").alias("sales"),
+            pl.sum("Profit").alias("profit"),
+            pl.mean("Discount").alias("discount"),
+            pl.count().alias("orders")
         ])
-        .sort("total_sales", descending=True)
+        .sort("sales", descending=True)
     )
 
     return [
-        f"Category {r['Category']} generated {r['total_sales']:.2f} in sales and {r['total_profit']:.2f} in profit, with avg discount {r['avg_discount']:.2f}."
+        f"{r['Category']} -> {r['Sub-Category']} generated {r['sales']:.2f} sales across {r['orders']} orders. "
+        f"Profit was {r['profit']:.2f} with margin {safe_div(r['profit'], r['sales']):.2%}. "
+        f"Average discount {r['discount']:.2f}."
         for r in result.to_dicts()
     ]
 
 
+# ---------- Regional + State ----------
 def regional_summary(df: pl.DataFrame):
     result = (
-        df.groupby("Region")
+        df.group_by(["Region", "State"])
         .agg([
-            pl.sum("Sales").alias("total_sales"),
-            pl.sum("Profit").alias("total_profit")
+            pl.sum("Sales").alias("sales"),
+            pl.sum("Profit").alias("profit")
         ])
-        .sort("total_sales", descending=True)
+        .sort("sales", descending=True)
     )
 
-    return [
-        f"Region {r['Region']} has total sales {r['total_sales']:.2f} and profit {r['total_profit']:.2f}."
-        for r in result.to_dicts()
+    top = result.head(5).to_dicts()
+
+    texts = [
+        f"State {r['State']} in {r['Region']} generated {r['sales']:.2f} sales and {r['profit']:.2f} profit."
+        for r in top
     ]
 
+    return texts
 
-def top_products(df: pl.DataFrame, n: int = 5):
+
+# ---------- Product Deep Analysis ----------
+def product_performance(df: pl.DataFrame, n: int = 10):
     result = (
-        df.groupby("Product Name")
+        df.group_by("Product Name")
         .agg([
-            pl.sum("Sales").alias("total_sales"),
-            pl.sum("Profit").alias("total_profit")
+            pl.sum("Sales").alias("sales"),
+            pl.sum("Profit").alias("profit"),
+            pl.mean("Discount").alias("discount"),
+            pl.count().alias("orders")
         ])
-        .sort("total_sales", descending=True)
-        .head(n)
+        .with_columns([
+            (pl.col("profit") / pl.col("sales")).alias("margin")
+        ])
+        .sort("sales", descending=True)
+    )
+
+    rows = result.to_dicts()
+
+    texts = []
+
+    for r in rows[:n]:
+        performance = "high performing"
+        if r["margin"] < 0:
+            performance = "loss-making"
+        elif r["margin"] < 0.05:
+            performance = "low margin"
+
+        texts.append(
+            f"Product {r['Product Name']} is {performance}. "
+            f"It generated {r['sales']:.2f} sales across {r['orders']} orders. "
+            f"Profit was {r['profit']:.2f} with margin {r['margin']:.2%}. "
+            f"Average discount {r['discount']:.2f}."
+        )
+
+    return texts
+
+def business_insights(df):
+    high_discount = df.filter(pl.col("Discount") > 0.3)
+    low_discount = df.filter(pl.col("Discount") <= 0.3)
+
+    high_margin = (high_discount["Profit"].sum() / high_discount["Sales"].sum())
+    low_margin = (low_discount["Profit"].sum() / low_discount["Sales"].sum())
+
+    return [f"""
+    Business insight:
+    High discounts (>30%) result in profit margin {high_margin:.2%},
+    while lower discounts result in margin {low_margin:.2%}.
+    This suggests that heavy discounting {'reduces' if high_margin < low_margin else 'does not reduce'} profitability.
+    """]
+
+def global_summary(df):
+    total_sales = df["Sales"].sum()
+    total_profit = df["Profit"].sum()
+    avg_discount = df["Discount"].mean()
+
+    best_category = (
+        df.group_by("Category")
+        .agg(pl.sum("Sales").alias("sales"))
+        .sort("sales", descending=True)
+        .row(0)[0]
+    )
+
+    return [f"""
+    Overall dataset summary:
+    Total sales are {total_sales:.2f} and total profit is {total_profit:.2f}.
+    Average discount is {avg_discount:.2f}.
+    The best performing category by sales is {best_category}.
+    """]
+
+# ---------- Discount Impact ----------
+def discount_analysis(df: pl.DataFrame):
+    result = (
+        df.with_columns([
+            (pl.col("Profit") / pl.col("Sales")).alias("margin")
+        ])
+        .group_by("Discount")
+        .agg([
+            pl.mean("margin").alias("avg_margin"),
+            pl.count().alias("orders")
+        ])
+        .sort("Discount")
     )
 
     return [
-        f"Top product: {r['Product Name']} with sales {r['total_sales']:.2f} and profit {r['total_profit']:.2f}."
+        f"At discount level {r['Discount']:.2f}, average profit margin is {r['avg_margin']:.2%} across {r['orders']} orders."
         for r in result.to_dicts()
     ]

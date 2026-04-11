@@ -4,33 +4,38 @@ from aggregation import (
     monthly_sales_summary,
     category_summary,
     regional_summary,
-    top_products
+    product_performance,
+    discount_analysis,
+    global_summary,
+    business_insights
 )
 from chunking import chunk_texts
 from embeddings import get_embeddings
 from vector_store import create_vector_store
 from rag_pipeline import ask_question
-from langchain.llms import Ollama
+from langchain_ollama import OllamaLLM
 
 
 def main():
     df = load_data("data/superstore.csv")
 
-    # Raw row-level texts
-    texts = dataframe_to_texts(df)
+    # No raw row-level texts
+    texts = []
 
     # Aggregated texts (IMPORTANT)
     texts += monthly_sales_summary(df)
     texts += category_summary(df)
-    texts += regional_summary(df)
-    texts += top_products(df)
+    texts += product_performance(df)
+    texts += discount_analysis(df)
+    texts += global_summary(df)
+    texts += business_insights(df)
 
     docs = chunk_texts(texts)
 
     embeddings = get_embeddings()
     db = create_vector_store(docs, embeddings)
 
-    llm = Ollama(model="phi3")
+    llm = OllamaLLM(model="phi3")
 
     while True:
         query = input("\nAsk a question (or 'exit'): ")

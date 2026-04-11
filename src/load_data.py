@@ -2,7 +2,7 @@
 import polars as pl
 
 def load_data(path: str):
-    df = pl.read_csv(path)
+    df = pl.read_csv(path, encoding="latin1")
     return df
 
 def row_to_text(row):
