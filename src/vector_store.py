@@ -1,4 +1,4 @@
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 
 def create_vector_store(docs, embeddings):
     db = Chroma.from_documents(
@@ -6,5 +6,4 @@ def create_vector_store(docs, embeddings):
         embedding=embeddings,
         persist_directory="chroma_db"
     )
-    db.persist()
     return db
