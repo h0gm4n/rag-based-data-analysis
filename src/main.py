@@ -13,7 +13,9 @@ from aggregation import (
     discount_frequency_analysis,
     regional_performance_analysis,
     state_performance_comparison,
-    city_performance_analysis
+    city_performance_analysis,
+    category_trends_comparison,
+    region_profit_comparison
 )
 from chunking import chunk_texts
 from embeddings import get_embeddings
@@ -35,8 +37,10 @@ def main():
     texts += subcategory_profit_margins(df)
     texts += discount_frequency_analysis(df)
     texts += regional_performance_analysis(df)
+    texts += region_profit_comparison(df)
     texts += state_performance_comparison(df)
     texts += city_performance_analysis(df)
+    texts += category_trends_comparison(df)
     texts += category_summary(df)
     texts += product_performance(df)
     texts += discount_analysis(df)

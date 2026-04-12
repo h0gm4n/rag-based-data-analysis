@@ -113,3 +113,21 @@ city_performance = df_full.group_by("City").agg(
 with pl.Config(tbl_rows=100):
     print("\nTop Performing Cities:")
     print(city_performance)
+
+# Technology vs Furniture sales trends
+df_full = df_full.with_columns(
+    pl.col("Order Date").str.strptime(pl.Date, "%m/%d/%Y")
+)
+
+category_trends = df_full.with_columns(
+    pl.col("Order Date").dt.truncate("1mo").alias("Month")
+).filter(
+    pl.col("Category").is_in(["Technology", "Furniture"])
+).group_by(["Month", "Category"]).agg(
+    pl.col("Sales").sum().alias("Total Sales"),
+    pl.col("Profit").sum().alias("Total Profit")
+).sort("Month")
+
+with pl.Config(tbl_rows=100):
+    print("\nTechnology vs Furniture Sales Trends:")
+    print(category_trends)

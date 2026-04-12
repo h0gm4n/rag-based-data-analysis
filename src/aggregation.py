@@ -447,3 +447,154 @@ Average profit margin across qualifying cities: {avg_margin:.2%}."""
         )
     
     return texts
+
+
+# ---------- Category Trends Comparison ----------
+def category_trends_comparison(df: pl.DataFrame):
+    df_with_date = df.with_columns(
+        pl.col("Order Date").str.strptime(pl.Date, strict=False)
+    )
+    
+    # Filter for Technology and Furniture
+    filtered_df = df_with_date.filter(
+        pl.col("Category").is_in(["Technology", "Furniture"])
+    )
+    
+    # Monthly trends by category
+    monthly_trends = (
+        filtered_df.with_columns(pl.col("Order Date").dt.truncate("1mo").alias("Month"))
+        .drop_nulls("Month")
+        .group_by(["Month", "Category"])
+        .agg([
+            pl.sum("Sales").alias("total_sales"),
+            pl.sum("Profit").alias("total_profit"),
+            pl.count().alias("order_count")
+        ])
+        .sort("Month")
+    )
+    
+    # Overall comparison
+    overall_comparison = (
+        filtered_df.group_by("Category")
+        .agg([
+            pl.sum("Sales").alias("total_sales"),
+            pl.sum("Profit").alias("total_profit"),
+            pl.count().alias("order_count"),
+            pl.mean("Discount").alias("avg_discount")
+        ])
+        .with_columns([
+            (pl.col("total_profit") / pl.col("total_sales")).alias("profit_margin")
+        ])
+    )
+    
+    overall_dicts = overall_comparison.to_dicts()
+    tech = next((cat for cat in overall_dicts if cat["Category"] == "Technology"), None)
+    furniture = next((cat for cat in overall_dicts if cat["Category"] == "Furniture"), None)
+    
+    texts = []
+    
+    if tech and furniture:
+        tech_higher_sales = tech["total_sales"] > furniture["total_sales"]
+        tech_higher_profit = tech["profit_margin"] > furniture["profit_margin"]
+        
+        better_sales_cat = "Technology" if tech_higher_sales else "Furniture"
+        better_profit_cat = "Technology" if tech_higher_profit else "Furniture"
+        
+        texts.append(
+            f"""TECHNOLOGY VS FURNITURE SALES TRENDS COMPARISON:
+Overall Performance: {better_sales_cat} has higher total sales ({max(tech['total_sales'], furniture['total_sales']):.0f} vs {min(tech['total_sales'], furniture['total_sales']):.0f}).
+Profitability: {better_profit_cat} has better profit margin ({max(tech['profit_margin'], furniture['profit_margin']):.2%} vs {min(tech['profit_margin'], furniture['profit_margin']):.2%})."""
+        )
+        
+        texts.append(
+            f"TECHNOLOGY: Total sales {tech['total_sales']:.0f}, profit {tech['total_profit']:.0f} ({tech['profit_margin']:.2%} margin) "
+            f"across {tech['order_count']} orders. Average discount: {tech['avg_discount']:.2f}."
+        )
+        
+        texts.append(
+            f"FURNITURE: Total sales {furniture['total_sales']:.0f}, profit {furniture['total_profit']:.0f} ({furniture['profit_margin']:.2%} margin) "
+            f"across {furniture['order_count']} orders. Average discount: {furniture['avg_discount']:.2f}."
+        )
+        
+        # Analyze trends
+        monthly_dicts = monthly_trends.to_dicts()
+        if monthly_dicts:
+            tech_recent = [m for m in monthly_dicts if m["Category"] == "Technology"][-1:]
+            furn_recent = [m for m in monthly_dicts if m["Category"] == "Furniture"][-1:]
+            
+            if tech_recent and furn_recent:
+                tech_trend = tech_recent[0]
+                furn_trend = furn_recent[0]
+                
+                texts.append(
+                    f"RECENT TREND (Latest Month): Technology {tech_trend['total_sales']:.0f} sales vs Furniture {furn_trend['total_sales']:.0f} sales. "
+                    f"Technology profit margin trend: {(tech_trend['total_profit'] / tech_trend['total_sales']):.2%}, "
+                    f"Furniture profit margin trend: {(furn_trend['total_profit'] / furn_trend['total_sales']):.2%}."
+                )
+    
+    return texts
+
+
+# ---------- Regional Profit Comparison: West vs East ----------
+def region_profit_comparison(df: pl.DataFrame):
+    # Filter for West and East regions
+    region_profits = (
+        df.filter(pl.col("Region").is_in(["West", "East"]))
+        .group_by("Region")
+        .agg([
+            pl.sum("Sales").alias("total_sales"),
+            pl.sum("Profit").alias("total_profit"),
+            pl.count().alias("order_count"),
+            pl.mean("Discount").alias("avg_discount"),
+            pl.mean("Sales").alias("avg_order_value")
+        ])
+        .with_columns([
+            (pl.col("total_profit") / pl.col("total_sales")).alias("profit_margin")
+        ])
+    )
+    
+    region_dicts = region_profits.to_dicts()
+    west = next((r for r in region_dicts if r["Region"] == "West"), None)
+    east = next((r for r in region_dicts if r["Region"] == "East"), None)
+    
+    texts = []
+    
+    if west and east:
+        profit_difference = west["total_profit"] - east["total_profit"]
+        margin_difference = west["profit_margin"] - east["profit_margin"]
+        
+        west_higher_profit = profit_difference > 0
+        west_higher_margin = margin_difference > 0
+        
+        better_region = "West" if west_higher_profit else "East"
+        better_margin_region = "West" if west_higher_margin else "East"
+        
+        texts.append(
+            f"""WEST VS EAST REGIONS: PROFIT COMPARISON:
+Total Profit Comparison: {better_region} region generated higher profit ({max(west['total_profit'], east['total_profit']):.0f} vs {min(west['total_profit'], east['total_profit']):.0f}). 
+Difference: {abs(profit_difference):.0f}.
+Profit Margin Comparison: {better_margin_region} region has better profit margin ({max(west['profit_margin'], east['profit_margin']):.2%} vs {min(west['profit_margin'], east['profit_margin']):.2%})."""
+        )
+        
+        texts.append(
+            f"WEST REGION: Total profit {west['total_profit']:.0f} from {west['total_sales']:.0f} in sales "
+            f"(margin: {west['profit_margin']:.2%}) across {west['order_count']} orders. "
+            f"Average order value: {west['avg_order_value']:.2f}, Average discount: {west['avg_discount']:.2f}."
+        )
+        
+        texts.append(
+            f"EAST REGION: Total profit {east['total_profit']:.0f} from {east['total_sales']:.0f} in sales "
+            f"(margin: {east['profit_margin']:.2%}) across {east['order_count']} orders. "
+            f"Average order value: {east['avg_order_value']:.2f}, Average discount: {east['avg_discount']:.2f}."
+        )
+        
+        # Additional insights
+        west_efficiency = west["total_profit"] / west["order_count"]
+        east_efficiency = east["total_profit"] / east["order_count"]
+        
+        texts.append(
+            f"Profit per Order: {better_region} region generates more profit per order. "
+            f"West: {west_efficiency:.2f} per order, East: {east_efficiency:.2f} per order."
+        )
+    
+    return texts
