@@ -28,10 +28,9 @@ import polars as pl
 def main():
     df = load_data("data/superstore.csv")
 
-    # No raw row-level texts
     texts = []
 
-    # Aggregated texts (IMPORTANT)
+    # Aggregated texts
     texts += monthly_sales_summary(df)
     texts += seasonality_analysis(df)
     texts += subcategory_profit_margins(df)

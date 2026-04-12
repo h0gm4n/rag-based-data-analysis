@@ -184,7 +184,6 @@ def seasonality_analysis(df: pl.DataFrame):
         pl.col("Order Date").str.strptime(pl.Date, strict=False)
     )
     
-    # Aggregate by month (across all years)
     monthly = (
         df.with_columns(pl.col("Order Date").dt.month().alias("month"))
         .drop_nulls("month")
@@ -199,7 +198,6 @@ def seasonality_analysis(df: pl.DataFrame):
     
     rows = monthly.to_dicts()
     
-    # Find peak and low months
     sorted_by_sales = sorted(rows, key=lambda x: x["total_sales"], reverse=True)
     peak_months = sorted_by_sales[:3]
     low_months = sorted_by_sales[-3:]
@@ -241,7 +239,6 @@ def subcategory_profit_margins(df: pl.DataFrame):
     
     rows = result.to_dicts()
     
-    # Find top and bottom performers
     top_performers = rows[:5]
     bottom_performers = rows[-3:]
     
@@ -254,7 +251,6 @@ Top performers (highest profit margins): {top_str}.
 Bottom performers (lowest profit margins): {bottom_str}."""
     ]
     
-    # Add individual sub-category insights
     for r in rows:
         performance = "highly profitable" if r["margin"] > 0.15 else "profitable" if r["margin"] > 0.05 else "low margin" if r["margin"] > 0 else "loss-making"
         texts.append(
@@ -267,20 +263,17 @@ Bottom performers (lowest profit margins): {bottom_str}."""
 
 # ---------- Discount Frequency Analysis ----------
 def discount_frequency_analysis(df: pl.DataFrame):
-    # Get total sales per product
     product_totals = (
         df.group_by("Product Name")
         .agg(pl.count().alias("total_sales"))
     )
     
-    # Get discounted sales per product
     discounted_sales = (
         df.filter(pl.col("Discount") > 0)
         .group_by("Product Name")
         .agg(pl.count().alias("discount_count"))
     )
     
-    # Combine and calculate percentage
     result = (
         product_totals.join(discounted_sales, on="Product Name", how="left")
         .with_columns([
@@ -292,7 +285,6 @@ def discount_frequency_analysis(df: pl.DataFrame):
     
     rows = result.to_dicts()
     
-    # Find products most frequently sold at discount
     frequent_discount = [r for r in rows if r["discount_percentage"] > 0.5][:5]
     frequent_str = ", ".join([f"{r['Product Name']} ({r['discount_percentage']:.1%})" for r in frequent_discount])
     
@@ -301,8 +293,7 @@ def discount_frequency_analysis(df: pl.DataFrame):
 Products most frequently sold at discount (>50% of sales): {frequent_str}."""
     ]
     
-    # Add detailed insights for products with significant discount activity
-    for r in rows[:10]:  # Top 10 most discounted products
+    for r in rows[:10]:
         if r["discount_count"] > 0:
             texts.append(
                 f"{r['Product Name']} was sold at a discount {r['discount_count']} times "
@@ -331,7 +322,6 @@ def regional_performance_analysis(df: pl.DataFrame):
     
     rows = result.to_dicts()
     
-    # Find best performing region
     best_region = rows[0]
     
     texts = [
@@ -340,7 +330,6 @@ Best performing region: {best_region['Region']} with {best_region['total_sales']
 and profit margin of {best_region['profit_margin']:.2%}."""
     ]
     
-    # Add insights for each region
     for r in rows:
         texts.append(
             f"{r['Region']} generated {r['total_sales']:.0f} in sales across {r['order_count']} orders, "
@@ -369,7 +358,6 @@ def state_performance_comparison(df: pl.DataFrame):
     
     rows = result.to_dicts()
     
-    # Find top and bottom performing states
     top_states = rows[:5]
     bottom_states = rows[-3:]
     
@@ -385,7 +373,6 @@ Bottom performing states (lowest sales): {bottom_str}.
 Average state sales: {avg_sales:.0f}."""
     ]
     
-    # Add detailed insights for each state
     for r in rows:
         performance = "top performer" if r["total_sales"] > avg_sales * 1.5 else "above average" if r["total_sales"] > avg_sales else "below average"
         texts.append(
@@ -415,15 +402,13 @@ def city_performance_analysis(df: pl.DataFrame):
     
     rows = result.to_dicts()
     
-    # Filter for cities with meaningful profit: positive margin AND substantial absolute profit
-    # Calculate 50th percentile of profits for meaningful threshold
+
     all_profits = sorted([r["total_profit"] for r in rows], reverse=True)
     min_profit_threshold = all_profits[len(all_profits) // 2] if all_profits else 0
     
     profitable_cities = [r for r in rows if r["profit_margin"] > 0 and r["total_profit"] >= min_profit_threshold]
     profitable_cities_sorted = sorted(profitable_cities, key=lambda x: x["profit_margin"], reverse=True)
-    
-    # Get top performers by profit margin
+
     top_cities = profitable_cities_sorted[:10]
     
     top_str = ", ".join([f"{c['City']} (margin: {c['profit_margin']:.2%})" for c in top_cities])
@@ -436,8 +421,7 @@ Only cities with positive profit margins and substantial profit generation (top 
 Top performing cities (ranked by profit margin): {top_str}.
 Average profit margin across qualifying cities: {avg_margin:.2%}."""
     ]
-    
-    # Add detailed insights for top performing cities
+
     for r in top_cities:
         performance = "exceptional" if r["profit_margin"] > 0.20 else "outstanding" if r["profit_margin"] > 0.15 else "very strong" if r["profit_margin"] > 0.10 else "strong"
         texts.append(
@@ -455,7 +439,6 @@ def category_trends_comparison(df: pl.DataFrame):
         pl.col("Order Date").str.strptime(pl.Date, strict=False)
     )
     
-    # Filter for Technology and Furniture
     filtered_df = df_with_date.filter(
         pl.col("Category").is_in(["Technology", "Furniture"])
     )
@@ -473,7 +456,6 @@ def category_trends_comparison(df: pl.DataFrame):
         .sort("Month")
     )
     
-    # Overall comparison
     overall_comparison = (
         filtered_df.group_by("Category")
         .agg([
@@ -516,7 +498,6 @@ Profitability: {better_profit_cat} has better profit margin ({max(tech['profit_m
             f"across {furniture['order_count']} orders. Average discount: {furniture['avg_discount']:.2f}."
         )
         
-        # Analyze trends
         monthly_dicts = monthly_trends.to_dicts()
         if monthly_dicts:
             tech_recent = [m for m in monthly_dicts if m["Category"] == "Technology"][-1:]
@@ -537,7 +518,6 @@ Profitability: {better_profit_cat} has better profit margin ({max(tech['profit_m
 
 # ---------- Regional Profit Comparison: West vs East ----------
 def region_profit_comparison(df: pl.DataFrame):
-    # Filter for West and East regions
     region_profits = (
         df.filter(pl.col("Region").is_in(["West", "East"]))
         .group_by("Region")
@@ -588,7 +568,6 @@ Profit Margin Comparison: {better_margin_region} region has better profit margin
             f"Average order value: {east['avg_order_value']:.2f}, Average discount: {east['avg_discount']:.2f}."
         )
         
-        # Additional insights
         west_efficiency = west["total_profit"] / west["order_count"]
         east_efficiency = east["total_profit"] / east["order_count"]
         
