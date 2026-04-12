@@ -7,13 +7,15 @@ from aggregation import (
     product_performance,
     discount_analysis,
     global_summary,
-    business_insights
+    business_insights,
+    seasonality_analysis
 )
 from chunking import chunk_texts
 from embeddings import get_embeddings
 from vector_store import create_vector_store
 from rag_pipeline import ask_question
 from langchain_ollama import OllamaLLM
+import polars as pl
 
 
 def main():
@@ -24,6 +26,7 @@ def main():
 
     # Aggregated texts (IMPORTANT)
     texts += monthly_sales_summary(df)
+    texts += seasonality_analysis(df)
     texts += category_summary(df)
     texts += product_performance(df)
     texts += discount_analysis(df)
@@ -44,7 +47,6 @@ def main():
 
         answer = ask_question(db, llm, query)
         print("\nAnswer:\n", answer)
-
 
 if __name__ == "__main__":
     main()

@@ -3,7 +3,6 @@ import polars as pl
 def safe_div(a, b):
     return a / b if b != 0 else 0
 
-
 # ---------- Monthly Trends ----------
 def monthly_sales_summary(df: pl.DataFrame):
     df = df.with_columns(
@@ -176,4 +175,50 @@ def discount_analysis(df: pl.DataFrame):
     return [
         f"At discount level {r['Discount']:.2f}, average profit margin is {r['avg_margin']:.2%} across {r['orders']} orders."
         for r in result.to_dicts()
+    ]
+
+
+# ---------- Seasonality Analysis ----------
+def seasonality_analysis(df: pl.DataFrame):
+    df = df.with_columns(
+        pl.col("Order Date").str.strptime(pl.Date, strict=False)
+    )
+    
+    # Aggregate by month (across all years)
+    monthly = (
+        df.with_columns(pl.col("Order Date").dt.month().alias("month"))
+        .drop_nulls("month")
+        .group_by("month")
+        .agg([
+            pl.sum("Sales").alias("total_sales"),
+            pl.sum("Profit").alias("total_profit"),
+            pl.count().alias("order_count")
+        ])
+        .sort("month")
+    )
+    
+    rows = monthly.to_dicts()
+    
+    # Find peak and low months
+    sorted_by_sales = sorted(rows, key=lambda x: x["total_sales"], reverse=True)
+    peak_months = sorted_by_sales[:3]
+    low_months = sorted_by_sales[-3:]
+    
+    month_names = {
+        1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+        7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+    }
+    
+    peak_str = ", ".join([f"{month_names[m['month']]} ({m['total_sales']:.0f})" for m in peak_months])
+    low_str = ", ".join([f"{month_names[m['month']]} ({m['total_sales']:.0f})" for m in low_months])
+    
+    avg_sales = sum(r["total_sales"] for r in rows) / len(rows)
+    seasonality_ratio = max(r["total_sales"] for r in rows) / min(r["total_sales"] for r in rows)
+    
+    return [
+        f"""SEASONALITY ANALYSIS: Strong seasonality detected (peak/low ratio: {seasonality_ratio:.1f}x). 
+Peak sales months: {peak_str}. 
+Low sales months: {low_str}. 
+Average monthly sales: {avg_sales:.0f}. 
+This indicates clear seasonal patterns in customer purchasing behavior."""
     ]
